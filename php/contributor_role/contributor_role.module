@@ -1,0 +1,351 @@
+<?php
+
+/**
+ * @file
+ * Defines a compound field type that tracks contributors and their roles.
+ */
+
+/**
+ * Implements hook_field_info().
+ */
+function contributor_role_field_info() {
+  return array(
+    'contributor_role_field' => array(
+      'label' => t('Contributor Role'),
+      'description' => t('Store a contributor and their roles.'),
+      'settings' => array(
+        'role_allowed_values' => array(),
+      ),
+      'instance_settings' => array(),
+      'default_widget' => 'contributor_role_field',
+      'default_formatter' => 'contributor_role_field',
+      'property_type' => 'contributor_role',
+      'property_callbacks' => array('contributor_role_property_info_callback'),
+    ),
+  );
+}
+
+/**
+ * Property type callback to expose the contributor and role to Entity API.
+ */
+function contributor_role_property_info_callback(&$info, $entity_type, $field, $instance, $field_type) {
+  $property = &$info[$entity_type]['bundles'][$instance['bundle']]['properties'][$field['field_name']];
+
+  unset($property['query callback']);
+  $property['type'] = ($field['cardinality'] != 1) ? 'list<contributor_role>' : 'contributor_role';
+  $property['getter callback'] = 'entity_metadata_field_verbatim_get';
+
+  $property['property info']['uid'] = array(
+    'type' => 'user',
+    'label' => t('Contributor'),
+    'getter callback' => 'entity_property_verbatim_get',
+  );
+  $property['property info']['role'] = array(
+    'type' => 'text',
+    'label' => t('Role'),
+    'getter callback' => 'entity_property_verbatim_get',
+  );
+}
+
+/**
+ * Implements hook_field_settings_form().
+ */
+function contributor_role_field_settings_form($field, $instance, $has_data) {
+  $settings = $field['settings'];
+
+  $form = array();
+
+  $description = '<p>' . t('The possible values this field can contain. Enter one value per line, in the format key|label.');
+  $description .= '<br/>' . t('Leave this field empty to allow any values entered into a text box.');
+  $description .= '<br/>' . t('The key is the stored value. The label will be used in displayed values and edit forms.');
+  $description .= '<br/>' . t('The label is optional: if a line contains a single string, it will be used as key and label.');
+  $description .= '</p>';
+  $form['role_allowed_values'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Allowed roles'),
+    '#description' => $description,
+    '#default_value' => !empty($settings['role_allowed_values']) ? list_allowed_values_string($settings['role_allowed_values']) : '',
+    '#rows' => 10,
+    '#element_validate' => array('contributor_role_role_allowed_values_setting_validate'),
+    '#field_has_data' => $has_data,
+    '#field' => $field,
+    '#field_type' => $field['type'],
+  );
+
+  return $form;
+}
+
+/**
+ * Validate the Role "Allowed Values" setting.
+ *
+ * Based on list_allowed_values_setting_validate().
+ */
+function contributor_role_role_allowed_values_setting_validate($element, &$form_state) {
+  $field = $element['#field'];
+  $has_data = $element['#field_has_data'];
+  $field_type = $field['type'];
+
+  $values = list_extract_allowed_values($element['#value'], 'list_text', FALSE);
+
+  if (!is_array($values)) {
+    form_error($element, t('Allowed values list: invalid input.'));
+  }
+  else {
+    // Check that keys are valid.
+    foreach ($values as $key => $value) {
+      if (drupal_strlen($key) > 255) {
+        form_error($element, t('Allowed values list: each key must be a string at most 255 characters long.'));
+        break;
+      }
+    }
+
+    // Prevent removing values currently in use.
+    $removed_in_use = array();
+    if ($has_data) {
+      $lost_keys = array_diff(array_keys($field['settings']['role_allowed_values']), array_keys($values));
+      foreach ($lost_keys as $lost_key) {
+        if (_contributor_role_list_value_in_use($field, $lost_key)) {
+          $removed_in_use[] = $lost_key;
+        }
+      }
+    }
+    if (!empty($removed_in_use)) {
+      form_error($element, format_plural(count($removed_in_use), 'Allowed values list: the value %values cannot be removed since it is currently in use.', 'Allowed values list: the values %values cannot be removed since they are currently in use.', array('%values' => implode(', ', $removed_in_use))));
+    }
+
+    form_set_value($element, $values, $form_state);
+  }
+}
+
+/**
+ * Get a list of entities who are using a given value.
+ *
+ * @param array $field
+ *   The field name.
+ * @param string $value
+ *   The value to check for.
+ *
+ * @return boolean
+ *   TRUE if the value is in use, FALSE otherwise.
+ */
+function _contributor_role_list_value_in_use($field, $value) {
+  if ($value) {
+    $query = new EntityFieldQuery();
+    $found = $query
+      ->fieldCondition($field['field_name'], 'role', $value)
+      ->range(0, 1)
+      ->execute();
+    return !empty($found);
+  }
+
+  return FALSE;
+}
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function contributor_role_field_widget_info() {
+  return array(
+    'contributor_role_field' => array(
+      'label' => t('Contributor Role'),
+      'field types' => array('contributor_role_field'),
+      'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function contributor_role_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  $settings = $field['settings'];
+  $defaults = (array) $instance['default_value'][0];
+
+  if (!empty($items[$delta]['role'])) {
+    $role_field_value = $items[$delta]['role'];
+  }
+  elseif (!empty($defaults['role'])) {
+    $role_field_value = $defaults['role'];
+  }
+  else {
+    $role_field_value = '';
+  }
+  $element['role'] = array(
+    '#title' => t('Role'),
+    '#type' => empty($settings['role_allowed_values']) ? 'textfield' : 'select',
+    '#options' => !empty($settings['role_allowed_values']) ? $settings['role_allowed_values'] : NULL,
+    '#default_value' => $role_field_value,
+  );
+
+  if (!empty($items[$delta]) && strlen((string) $items[$delta]['uid'])) {
+    // Load the currently selected user by ID and extract their label.
+    if (is_numeric($items[$delta]['uid'])) {
+      $account = user_load($items[$delta]['uid']);
+      if ($account) {
+        $user_field_value = entity_label('user', $account);
+      }
+      else {
+        $user_field_value = $items[$delta]['uid'];
+      }
+    }
+    // The current value is a string user name.
+    else {
+      $user_field_value = $items[$delta]['uid'];
+    }
+  }
+  else {
+    $user_field_value = isset($defaults['uid']) ? $defaults['uid'] : '';
+  }
+  $element['uid'] = array(
+    '#title' => t('Contributor'),
+    '#type' => 'textfield',
+    '#default_value' => $user_field_value,
+    '#autocomplete_path' => 'user/autocomplete',
+    '#element_validate' => array('_contributor_role_user_validate'),
+  );
+
+  return $element;
+}
+
+/**
+ * Element validation function for the UID field.
+ *
+ * Converts any non-numeric user names to user IDs and validates the user's
+ * existence.
+ */
+function _contributor_role_user_validate($element, &$form_state) {
+  // Validate non-empty user names / IDs.
+  if (strlen((string) $element['#value'])) {
+    // Validate that the user ID exits.
+    if (is_numeric($element['#value'])) {
+      $params = array(':uid' => $element['#value']);
+      if (!db_query("SELECT COUNT(1) FROM {users} WHERE uid = :uid", $params)->fetchField()) {
+        form_error($element, t('The user ID ":uid" does not exist.', $params));
+      }
+    }
+    // Look up the user ID based on the entered user name.
+    else {
+      $params = array(':name' => $element['#value']);
+      $uid = db_query("SELECT uid FROM {users} WHERE name = :name", $params)->fetchField();
+      // Throw an error if the username does not exist.
+      if ($uid === FALSE) {
+        form_error($element, t('The user ":name" does not exist.', $params));
+      }
+      // Save the user ID instead of the user name if it was valid.
+      else {
+        form_set_value($element, $uid, $form_state);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_field_validate().
+ */
+function contributor_role_field_validate($entity_type, $entity, $field, $instance, $langcode, $items, &$errors) {
+  // Only add validation if the field is required and this is not the field
+  // settings form.
+  if ($instance['required'] && !empty($entity_type)) {
+    $all_empty = TRUE;
+    foreach ($items as $item) {
+      if (strlen((string) $item['uid'])) {
+        $all_empty = FALSE;
+        break;
+      }
+    }
+    if ($all_empty) {
+      $errors[$field['field_name']][$langcode][0][] = array(
+        'error' => 'contributor_role_empty',
+        'message' => t('@field field is required.', array('@field' => $instance['label'])),
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_field_is_empty().
+ */
+function contributor_role_field_is_empty($item, $field) {
+  return empty($item['role']) && (!isset($item['uid']) || $item['uid'] == NULL || $item['uid'] == '');
+}
+
+/**
+ * Implements hook_field_presave().
+ *
+ * Prune all entries which only contain default or empty values.
+ *
+ * This would be the task of hook_field_is_empty(), but that does not
+ * contain the field instance default values.
+ * @see https://drupal.org/node/1489484
+ */
+function contributor_role_field_presave($entity_type, $entity, $field, $instance, $langcode, &$items) {
+  // Get the field instance defaults.
+  $default = (array) $instance['default_value'][0];
+
+  foreach ($items as $delta => $item) {
+    // If all values are set to the defaults, or no UID was specified, don't
+    // save this item.
+    if ($item == $default || !strlen((string) $item['uid'])) {
+      unset($items[$delta]);
+      unset($entity->{$field['field_name']}[$langcode][$delta]);
+    }
+    // Also remove the following.
+    // This shouldn't be necessary, since 'normal' empty fields still contain
+    // this complete entry. But while testing, the node-view page still shows.
+    if (empty($entity->{$field['field_name']}[$langcode])) {
+      unset($entity->{$field['field_name']}[$langcode]);
+    }
+  }
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function contributor_role_field_formatter_info() {
+  return array(
+    'contributor_role_field' => array(
+      'label' => t('Contributor Role'),
+      'field types' => array('contributor_role_field'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function contributor_role_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $allowed_values = $field['settings']['role_allowed_values'];
+
+  $elements = array();
+  foreach ($items as $delta => $item) {
+    $elements[$delta] = array();
+
+    if (empty($allowed_values)) {
+      $role = $item['role'];
+    }
+    else {
+      $role = isset($allowed_values[$item['role']]) ? $allowed_values[$item['role']] : '';
+    }
+    $elements[$delta]['role'] = array(
+      '#prefix' => '<span class="role">',
+      '#suffix' => '</span>',
+      '#markup' => filter_xss($role) . ': ',
+    );
+
+    $account = user_load($item['uid']);
+    if ($account) {
+      $elements[$delta]['contributor'] = array(
+        '#theme' => 'username',
+        '#account' => $account,
+      );
+    }
+    else {
+      $elements[$delta]['contributor'] = array(
+        '#prefix' => '<span class="username not-found">',
+        '#suffix' => '</span>',
+        '#markup' => $item['uid'],
+      );
+    }
+  }
+  return $elements;
+}

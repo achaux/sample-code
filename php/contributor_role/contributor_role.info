@@ -1,0 +1,6 @@
+name = Contributor Role Field
+description = Defines a compound field type that tracks contributors and their roles.
+core = 7.x
+dependencies[] = field
+dependencies[] = list
+dependencies[] = user
