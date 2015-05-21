@@ -1,0 +1,145 @@
+<?php
+/**
+ * @file - This file will add a validation function for the usernode content type
+ * and validate that any given Credly value points to the credly.com website.
+*/
+
+/**
+ * Define constants
+ * The Credly credentials are associated with Alex Chaux's Credly account
+ * @link https://developers.credly.com/my-apps
+ */
+define('CREDLY_API_URI', 'https://api.credly.com/v1.1/members');
+define('CREDLY_API_KEY', '1649971964518abe4e171a72cf6ab988');
+define('CREDLY_API_SECRET', 'bSwp5xT4h02+yEOT5QjBNez7K2/3P0Yqi+1SDNrKIj2BA91lV7CfCTdF60F7vzzWBaHzwrO13FYJIzGseWpTE7porCevprDdUKDk0OIBLb+zk8h2gtQ1XyhPN4nOLcvlhh47qTlu2HHWCsx2XaV3MWievqt1DLlRz1kXADSqMIs=');
+
+$path = drupal_get_path('module','edu_credly');
+
+/**
+ * Implement hook_menu().
+ *
+ * Define path for a callback function that provides credly data.
+ */
+function edu_credly_menu() {
+  $items = array();
+  $items['edu_credly/query_credly/callback/%'] = array(
+    'page callback' => 'edu_credly_query_callback',
+    'page arguments' => array(3, ''),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_form_alter()
+ * Alter the usernode_node_form form and add another validation handler
+ */
+function edu_credly_form_alter(&$form, &$form_state, $form_id) {
+  switch($form_id){
+    
+  // If we are looking at the usernode content type form, we need to add a 
+  // validator for the Credly URL
+  case 'usernode_node_form':
+    drupal_add_css(drupal_get_path('module', 'edu_credly') .'/css/edu_credly.css');
+    drupal_add_js(drupal_get_path('module', 'edu_credly') .'/js/edu_credly_ajax.js');
+
+    // Add text to Credly field
+    $form['field_credly_email']['#prefix'] = t('<span class="form-item"><label for="edit-field-credly-email-0-value">Link your badge account: </label></span>
+     <div class="edit-field-credly-email-description">You can link your Credly badge account to your EDUCAUSE profile.  Enter your Credly profile email address and click the "Link your account" button.</div>
+     <div class="edit-field-credly-email-description-linked js-hide">Your Credly badge account is now linked to your EDUCAUSE profile.</div>');
+    $form['field_credly_email']['#title'] = NULL;
+    $form['field_credly_email']['#attributes'] = array('class' => 'float-left');
+
+    // Add button for the Ajax call to Credly
+    $form['field_credly_submit'] = array(
+      '#type' => 'button',
+      '#value' => 'Link your account',
+      '#attributes' => array('class' => 'field_edu_credly_submit'),
+      '#weight' => ($form['field_credly_email']['#weight'] + 0.5),
+    );
+
+    // Add markup field to display messages
+    $form['field_credly_markup'] = array(
+      '#type' => 'fieldset',
+      '#title' => '',
+      '#attributes' => array('class' => 'field_credly_markup js-hide'),
+      '#collapsible' => FALSE,
+      '#collapsed' => TRUE,
+      '#weight' => ($form['field_credly_email']['#weight'] + 0.6),
+    );
+
+    // Add button to remove Credly
+    $form['field_credly_remove'] = array(
+      '#type' => 'image_button',
+      '#value' => t('Unlink your Credly account'),
+      '#src' => drupal_get_path('module', 'edu_credly') . '/css/remove_18x18.png',
+      '#attributes' => array('class' => 'field_edu_credly_remove js-hide'),
+      '#weight' => ($form['field_credly_email']['#weight'] + 0.7),
+      );
+
+    // Add validation specific to the Credly fields
+    $form['#validate'][] = 'edu_credly_usernode_node_form_validate';
+    break;
+  }
+}
+
+/**
+ * Implementation of hook_form_validate()
+ * Validation handler for the Credly URL
+ */
+function edu_credly_usernode_node_form_validate($form, &$form_state){
+  switch($form_state['values']['type']){
+    case 'usernode':
+      // Credly profile URL is not required, only validate if provided.
+      break;
+  }
+}
+
+/**
+ * helper function to validate Credly URLs
+ */
+function _edu_credly_validate_url($url) {
+}
+
+/**
+ * Callback function that queries Credly for profile id base on provided email address
+ * @param email - email addres
+ * @return string - credly id on success, FALSE on fail
+ */
+function edu_credly_query_callback($email) {
+  // Make sure that we are dealing with a valid email address
+  if (valid_email_address($email) == 1) {
+    $request_headers = array(
+      'Content-Type: application/x-www-form-urlencoded',
+      'X-Api-Key: ' . CREDLY_API_KEY,
+      'X-Api-Secret: ' . CREDLY_API_SECRET,
+      );
+    $args = array(
+      'email' => $email,
+      'has_profile' => 0,
+      'verbose' => 0,
+      'page' => 1,
+      'per_page' => 1,
+      'order_direction' => 'ASC',
+      );
+
+  // Try cURL
+    $url = sprintf("%s?%s", CREDLY_API_URI, http_build_query($args, '', '&'));
+    $ch = curl_init();
+    curl_setopt($ch, CURLINFO_HEADER_OUT, TRUE);
+    curl_setopt($ch, CURLOPT_VERBOSE, FALSE);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $request_headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+
+    $results = curl_exec($ch);
+    drupal_json(array('status' => 0, 'data' => json_decode($results)));
+  }
+  else {
+    watchdog('edu_credly', 'Provided data: ' . $email . 'is not a valid email address', array(), WATCHDOG_WARNING);
+    return FALSE;
+  }
+}

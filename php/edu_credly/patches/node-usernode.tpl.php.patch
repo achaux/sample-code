@@ -1,0 +1,34 @@
+diff --git a/sites/all/themes/edutheme/node-usernode.tpl.php b/sites/all/themes/edutheme/node-usernode.tpl.php
+index 78928e4..da990bd 100755
+--- a/sites/all/themes/edutheme/node-usernode.tpl.php
++++ b/sites/all/themes/edutheme/node-usernode.tpl.php
+@@ -1,6 +1,5 @@
+ <?php
+-  
+-  $company = $address = $city = $state = $country = $zip = $email = $favorites = $twitter_display = '';
++  $company = $address = $city = $state = $country = $zip = $email = $favorites = $credly_display = $twitter_display = '';
+   
+   // "If the user does not have a profile, his usernode should automatically be set to Disable/Hide from All Users."
+   // Note, euser / euser interface module will intercept and deny access to serving this template, so we're just setting defaults here.
+@@ -155,6 +154,11 @@
+         $twitter_display .= l('@'.$twit_usr->screen_name, 'http://twitter.com/'.$twit_usr->screen_name).' ';
+       }
+     }
++    
++    // Populate Credly link if provided
++    if ($node->field_credly_id[0]['safe']) {
++      $credly_display .= l('Credly badge profile', "http://credly.com/u/" . $node->field_credly_id[0]['safe'], array('attributes' => array('target' => '_blank'))).' ';
++    }
+   }
+   if (!$imis_id && !shib_util_get_authmap($node->uid)) {
+     if (user_access('administer nodes') || user_access('administer users')) {
+@@ -190,6 +194,9 @@
+       <?php if(!empty($twitter_display)) : ?>
+       <div class="twitter"><?php print $twitter_display; ?></div>
+       <?php endif; ?>
++      <?php if(!empty($credly_display)) : ?>
++      <div class="credly"><?php print $credly_display; ?></div>
++      <?php endif; ?>
+       <div class="website"><?php print $website; ?></div>
+     </div>
+     <?php endif; ?>

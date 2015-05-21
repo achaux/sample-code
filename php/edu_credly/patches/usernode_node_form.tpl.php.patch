@@ -1,0 +1,39 @@
+diff --git a/sites/all/themes/edutheme/usernode_node_form.tpl.php b/sites/all/themes/edutheme/usernode_node_form.tpl.php
+index 65e3094..92b42c9 100755
+--- a/sites/all/themes/edutheme/usernode_node_form.tpl.php
++++ b/sites/all/themes/edutheme/usernode_node_form.tpl.php
+@@ -121,11 +121,30 @@ if (module_exists('tabs')) {
+ 
+ 	$photo_bio  = drupal_render($form['group_photobio']);
+ 
+-    $ontheweb  = '<p class="description">You like the net? We like it too! Enter information about your use of various services here. We\'ll add it to your profile and give you a special listing in our Affinity Finder. We\'re also looking at opportunities for integrating our content and programming with more of these services. Your input will help us guide our approach. If you have ideas about services we should add (or remove) to the list or about some fantastic concept for integrating with one of these services, please send an email to <a href="mailto:ideas@educause.edu">ideas@educause.edu</a>.</p>';
++  $ontheweb  = '<p class="description">You like the net? We like it too! Enter information about your use of various services here. We\'ll add it to your profile and give you a special listing in our Affinity Finder. We\'re also looking at opportunities for integrating our content and programming with more of these services. Your input will help us guide our approach. If you have ideas about services we should add (or remove) to the list or about some fantastic concept for integrating with one of these services, please send an email to <a href="mailto:ideas@educause.edu">ideas@educause.edu</a>.</p>';
+ 	$ontheweb .= drupal_render($form['group_on_the_web']);
+-    if (user_access('use scim interface') && !empty($form['twitter_oauth'])) {
+-    	$ontheweb .= drupal_render($form['twitter_oauth']);
+-	}
++
++  // Display Credly fields
++  if (!empty($form['group_credly_profile'])) {
++    $form['group_credly_profile']['field_credly_email'][0]['value']['#title'] = NULL;
++
++    $form['group_credly_profile']['field_credly_get_primary_email'] = $form['field_credly_get_primary_email'];
++    unset($form['field_credly_get_primary_email']);
++
++    $form['group_credly_profile']['field_credly_submit'] = $form['field_credly_submit'];
++    unset($form['field_credly_submit']);
++
++    $form['group_credly_profile']['field_credly_remove'] = $form['field_credly_remove'];
++    unset($form['field_credly_remove']);
++
++    $form['group_credly_profile']['field_credly_markup'] = $form['field_credly_markup'];
++    unset($form['field_credly_markup']);
++
++    $ontheweb .= drupal_render($form['group_credly_profile']);
++  }
++  if (user_access('use scim interface') && !empty($form['twitter_oauth'])) {
++    $ontheweb .= drupal_render($form['twitter_oauth']);
++  }
+ 	$ontheweb .= drupal_render($form['group_touchpoints']);
+ 
+ 	$privacy  = '<p class="description">At EDUCAUSE, we value your privacy.   Our privacy policy is '.l('available here', 'node/1440').' and we provide a number of options for opting-out of our communications offerings.</p>';
